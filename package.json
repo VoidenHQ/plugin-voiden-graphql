@@ -1,6 +1,6 @@
 {
   "name": "@voiden/plugin-voiden-graphql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "private": false,
   "description": "GraphQL client with schema importer for building queries through a dedicated UI or editing manually. Supports queries, mutations, subscriptions with variables. Builds its own requests with auto-generated headers and POST method",
@@ -10,12 +10,12 @@
     "release": "node build.mjs && node generate-manifest.mjs"
   },
   "peerDependencies": {
-    "@voiden/sdk": "^1.0.10-beta.1",
+    "@voiden/sdk": "1.0.10",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@voiden/sdk": "1.0.10-beta.1",
+    "@voiden/sdk": "1.0.10",
     "esbuild": "^0.20.0",
     "typescript": "^5.0.0",
     "vite": "^5.0.0"
