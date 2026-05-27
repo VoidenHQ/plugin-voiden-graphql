@@ -28,4 +28,5 @@ jobs:
           files: |
             dist/voiden-graphql.js
             dist/voiden-graphql-runner.js
+            src/skill.md
             manifest.json
