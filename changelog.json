@@ -1,0 +1,37 @@
+[
+  {
+    "version": "v1.0.4",
+    "date": "29/05/2026",
+    "title": "Build Fix",
+    "changes": {
+      "Fixed": [
+        "Remove catch-all shim from build pipeline for correct dependency bundling"
+      ]
+    }
+  },
+  {
+    "version": "v1.0.1",
+    "date": "27/05/2026",
+    "title": "Shim & Stability Fix",
+    "changes": {
+      "Fixed": [
+        "Removed catch-all shim block that caused runtime import errors for bundled dependencies"
+      ]
+    }
+  },
+  {
+    "version": "v1.0.0",
+    "date": "10/04/2026",
+    "title": "Initial Release",
+    "description": "GraphQL plugin for Voiden with introspection, variables, and schema explorer.",
+    "changes": {
+      "Added": [
+        "GraphQL query and mutation execution",
+        "Schema introspection and explorer sidebar",
+        "Variables editor with JSON validation",
+        "Custom headers support",
+        "Response viewer with syntax highlighting"
+      ]
+    }
+  }
+]
