@@ -6,8 +6,9 @@
 
 import type { CorePluginContext } from '@voiden/sdk/ui';
 type PluginContext = CorePluginContext;
+import { parseGraphQLVariablesBody, resolveGraphQLBlocks } from './lib/graphqlBlocks';
 import { parseGraphQLOperation } from './lib/utils';
-import manifest from './manifest.json';
+import manifest from '../manifest.json';
 
 export default function createGraphQLPlugin(context: PluginContext) {
 
@@ -56,8 +57,8 @@ export default function createGraphQLPlugin(context: PluginContext) {
           const editorJson = editor.getJSON();
 
           // Only handle documents with a gqlquery node
-          const gqlNode = editorJson.content?.find(
-            (n: any) => n.type === 'gqlquery'
+          const { queryNode: gqlNode, variablesNode: gqlVariablesNode } = resolveGraphQLBlocks(
+            editorJson.content,
           );
           if (!gqlNode) return request; // Not a GraphQL doc, pass through
 
@@ -80,18 +81,7 @@ export default function createGraphQLPlugin(context: PluginContext) {
             operationName = match[2];
           }
 
-          // Get variables from gqlvariables block
-          const gqlVariablesNode = editorJson.content?.find(
-            (n: any) => n.type === 'gqlvariables'
-          );
-          let variables: any = {};
-          if (gqlVariablesNode) {
-            try {
-              variables = JSON.parse(gqlVariablesNode.attrs?.body || '{}');
-            } catch (e) {
-              // ignore parse errors
-            }
-          }
+          const variables = parseGraphQLVariablesBody(gqlVariablesNode?.attrs?.body);
 
           // URL: from gqlurl child text, or legacy attrs.endpoint, or schemaUrl
           const gqlUrlText = gqlUrlChild?.content?.[0]?.text || gqlUrlChild?.content || '';

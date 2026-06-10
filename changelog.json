@@ -1,5 +1,19 @@
 [
   {
+    "version": "v1.0.1",
+    "date": "10/06/2026",
+    "title": "Multi-request & Variable Sync Fix",
+    "changes": {
+      "Fixed": [
+        "gql-variable block now correctly pairs with its own gql-query in multi-request files separated by request-separator",
+        "Adding a new gql-variable block no longer updates the first gql-variable of another request",
+        "Editing a gql-query now immediately reflects variable changes in its paired gql-variable block",
+        "Schema viewer no longer crashes with circular type references — gracefully falls back to an error message",
+        "flushSync warning eliminated when inserting a new GraphQL query block"
+      ]
+    }
+  },
+  {
     "version": "v1.0.4",
     "date": "29/05/2026",
     "title": "Build Fix",

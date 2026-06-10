@@ -8,6 +8,31 @@
 import React from "react";
 import { mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
+
+const MAX_FIELD_DEPTH = 8;
+
+class SchemaViewerErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 text-sm text-comment text-center border border-border rounded">
+          Schema viewer unavailable for this selection. Switch to editor mode to write the query manually.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { Eye, Pen, ExternalLink, FileDown, Link, Loader2, X, CircleX } from "lucide-react";
 import { Buffer } from "buffer";
 import {
@@ -72,39 +97,6 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       return props.node.attrs.importedFrom;
     }, [props.editor.state, props.node.attrs.importedFrom]);
 
-    // Initial sync
-    React.useEffect(() => {
-      const timer = setTimeout(() => {
-        const doc = props.editor.state.doc;
-        doc.descendants((node: any) => {
-          if (node.type.name === 'gqlvariables') {
-            const firstOperation = availableOperations[0]?.name;
-            if (firstOperation && props.node.attrs.body) {
-              const selectedArgs = operationArgSelections[firstOperation] || new Set();
-              const currentVariables = node.attrs.body;
-              const newVariables = generateVariablesFromQuery(
-                props.node.attrs.body,
-                currentVariables,
-                firstOperation,
-                selectedArgs
-              );
-              if (!currentVariables || currentVariables.trim() === '' || currentVariables === '{}') {
-                doc.descendants((n: any, pos: number) => {
-                  if (n.type.name === 'gqlvariables') {
-                    const tr = props.editor.state.tr;
-                    tr.setNodeMarkup(pos, null, { ...n.attrs, body: newVariables });
-                    props.editor.view.dispatch(tr);
-                    return false;
-                  }
-                });
-              }
-            }
-            return false;
-          }
-        });
-      }, 100);
-      return () => clearTimeout(timer);
-    }, []);
 
     // Pre-fill connectionUrl from doc URL node
     React.useEffect(() => {
@@ -122,8 +114,8 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     }, [showConnectionInput]);
 
     React.useEffect(() => {
-      if (props.node.attrs.schemaUrl !== connectionUrl) {
-        props.updateAttributes({ schemaUrl: connectionUrl });
+      if ((props.node.attrs.schemaUrl ?? '') !== connectionUrl) {
+        props.updateAttributes({ schemaUrl: connectionUrl || null });
       }
     }, [connectionUrl]);
 
@@ -378,6 +370,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     const handleEditorChange = (newContent: string) => {
       setEditorQuery(newContent);
       props.updateAttributes({ body: newContent });
+      syncVariablesWithBody(newContent);
       if (schema) {
         const operations = extractOperations(newContent);
         const newSelectedOperations = new Set<string>();
@@ -625,11 +618,15 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       fieldPath: string,
       depth: number = 0,
       isSelected: boolean,
-      onToggle: () => void
+      onToggle: () => void,
+      visitedTypes: Set<string> = new Set()
     ): JSX.Element => {
       if (!schema) return <></>;
-      const fieldArgSelection = fieldArgSelections[operationName]?.[fieldPath] || new Set();
+      if (depth >= MAX_FIELD_DEPTH) return <></>;
       const returnTypeName = field.type.replace(/[\[\]!]/g, '');
+      // Guard against circular type references (e.g. User.friends: [User])
+      if (visitedTypes.has(returnTypeName)) return <></>;
+      const fieldArgSelection = fieldArgSelections[operationName]?.[fieldPath] || new Set();
       const returnType = schema.types.find(t => t.name.toLowerCase() === returnTypeName.toLowerCase());
       const hasSubfields = returnType && returnType.fields && returnType.fields.length > 0;
       const currentLevelNestedFields = nestedFieldSelections[operationName]?.[fieldPath] || new Set();
@@ -658,7 +655,9 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
               {returnType.fields.map((subfield) => {
                 const subfieldPath = `${fieldPath}.${subfield.name}`;
                 const isSubfieldSelected = currentLevelNestedFields.has(subfield.name);
-                return renderField(operationName, subfield, subfieldPath, depth + 1, isSubfieldSelected, () => handleNestedFieldToggle(operationName, fieldPath, subfield.name));
+                const nextVisited = new Set(visitedTypes);
+                nextVisited.add(returnTypeName);
+                return renderField(operationName, subfield, subfieldPath, depth + 1, isSubfieldSelected, () => handleNestedFieldToggle(operationName, fieldPath, subfield.name), nextVisited);
               })}
             </div>
           )}
@@ -676,26 +675,68 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       }
     }, [selectedOperations, operationFieldSelections, fieldArgSelections, operationArgSelections, nestedFieldSelections, schema, activeTab, mode]);
 
-    const syncVariables = React.useCallback(() => {
-      const firstOperation = availableOperations[0]?.name;
-      if (!firstOperation || !props.node.attrs.body) return;
+    // Core sync logic — takes the body explicitly so it can be called with fresh
+    // content before React has re-rendered with updated props.
+    const syncVariablesWithBody = React.useCallback((body: string) => {
+      if (!body) return;
+      const operations = extractOperations(body);
+      const firstOperation = operations[0]?.name;
+      if (!firstOperation) return;
+
       const doc = props.editor.state.doc;
-      let variablesNodePos: number | null = null;
-      let variablesNode: any = null;
-      doc.descendants((node: any, pos: number) => {
-        if (node.type.name === 'gqlvariables') { variablesNode = node; variablesNodePos = pos; return false; }
+      const bodyPos = typeof props.getPos === 'function' ? props.getPos() : null;
+
+      const topLevel: Array<{ type: string; node: any; pos: number }> = [];
+      doc.forEach((node: any, pos: number) => {
+        topLevel.push({ type: node.type.name, node, pos });
       });
-      if (variablesNode && variablesNodePos !== null) {
-        const selectedArgs = operationArgSelections[firstOperation] || new Set();
-        const currentVariables = variablesNode.attrs.body;
-        const newVariables = generateVariablesFromQuery(props.node.attrs.body, currentVariables, firstOperation, selectedArgs);
-        if (newVariables !== currentVariables) {
-          const tr = props.editor.state.tr;
-          tr.setNodeMarkup(variablesNodePos, null, { ...variablesNode.attrs, body: newVariables });
-          props.editor.view.dispatch(tr);
+
+      let ourQueryIdx = -1;
+      if (bodyPos != null) {
+        for (let i = 0; i < topLevel.length; i++) {
+          const { type, node, pos } = topLevel[i];
+          if (type === 'gqlquery' && bodyPos > pos && bodyPos < pos + node.nodeSize) {
+            ourQueryIdx = i;
+            break;
+          }
         }
       }
-    }, [props.node.attrs.body, availableOperations, operationArgSelections, props.editor]);
+      if (ourQueryIdx === -1) {
+        for (let i = topLevel.length - 1; i >= 0; i--) {
+          if (topLevel[i].type === 'gqlquery') { ourQueryIdx = i; break; }
+        }
+      }
+      if (ourQueryIdx === -1) return;
+
+      let variablesNode: any = null;
+      let variablesNodePos: number | null = null;
+      for (let i = ourQueryIdx + 1; i < topLevel.length; i++) {
+        const t = topLevel[i].type;
+        if (t === 'gqlquery' || t === 'request-separator') break;
+        if (t === 'gqlvariables') { variablesNode = topLevel[i].node; variablesNodePos = topLevel[i].pos; break; }
+      }
+      if (!variablesNode) {
+        for (let i = ourQueryIdx - 1; i >= 0; i--) {
+          const t = topLevel[i].type;
+          if (t === 'gqlquery' || t === 'request-separator') break;
+          if (t === 'gqlvariables') { variablesNode = topLevel[i].node; variablesNodePos = topLevel[i].pos; break; }
+        }
+      }
+
+      if (!variablesNode || variablesNodePos == null) return;
+      const selectedArgs = operationArgSelections[firstOperation] || new Set();
+      const currentVariables = variablesNode.attrs.body;
+      const newVariables = generateVariablesFromQuery(body, currentVariables, firstOperation, selectedArgs);
+      if (newVariables !== currentVariables) {
+        const tr = props.editor.state.tr;
+        tr.setNodeMarkup(variablesNodePos, null, { ...variablesNode.attrs, body: newVariables });
+        props.editor.view.dispatch(tr);
+      }
+    }, [operationArgSelections, props.editor, props.getPos]);
+
+    const syncVariables = React.useCallback(() => {
+      syncVariablesWithBody(props.node.attrs.body);
+    }, [props.node.attrs.body, syncVariablesWithBody]);
 
     React.useEffect(() => { syncVariables(); }, [syncVariables]);
 
@@ -807,6 +848,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
               />
             </div>
           ) : (
+            <SchemaViewerErrorBoundary>
             <div className="bg-editor border border-border">
               {schema && (
                 <div>
@@ -1018,6 +1060,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
                 </div>
               )}
             </div>
+            </SchemaViewerErrorBoundary>
           )}
         </div>
       </NodeViewWrapper>
