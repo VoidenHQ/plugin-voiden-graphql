@@ -740,11 +740,6 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
 
     React.useEffect(() => { syncVariables(); }, [syncVariables]);
 
-    React.useEffect(() => {
-      props.editor.on('update', syncVariables);
-      return () => { props.editor.off('update', syncVariables); };
-    }, [props.editor, syncVariables]);
-
     const hasSchema = (props.node.attrs.schemaFileName || props.node.attrs.schemaUrl) && schema;
     const isEditable = props.editor.isEditable;
 
