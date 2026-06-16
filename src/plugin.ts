@@ -50,6 +50,22 @@ export default function createGraphQLPlugin(context: PluginContext) {
         'gqlsubscriptionevents',
       ]);
 
+      (context as any).registerBlockOutlineMeta({
+        gqlquery: {
+          label: "GraphQL Query",
+          icon: "Zap",
+          getPreview: (_attrs: Record<string, any>, textContent: string) => {
+            if (!textContent) return undefined;
+            const trimmed = textContent.trim();
+            return trimmed.length > 50 ? trimmed.slice(0, 50) + "…" : trimmed || undefined;
+          },
+        },
+        gqlurl: { label: "URL", icon: "Globe" },
+        gqlbody: { label: "Query Body", icon: "Braces" },
+        gqlvariables: { label: "Variables", icon: "Variable" },
+        gqlsubscriptionevents: { label: "Subscription Events", icon: "Radio" },
+      });
+
       // Register request building handler
       context.onBuildRequest(async (request, editor) => {
         try {

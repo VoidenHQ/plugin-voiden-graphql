@@ -1,6 +1,6 @@
 {
   "name": "@voiden/plugin-voiden-graphql",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "private": false,
   "description": "GraphQL client with schema importer for building queries through a dedicated UI or editing manually. Supports queries, mutations, subscriptions with variables. Builds its own requests with auto-generated headers and POST method",
