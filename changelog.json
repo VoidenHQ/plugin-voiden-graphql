@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.0.2",
+    "date": "16/06/2026",
+    "title": "Block Overview Panel Integration",
+    "changes": {
+      "Added": [
+        "Block outline metadata for gqlquery, gqlvariables, and gqlsubscriptionevents so they display at their correct document positions with labels and previews in the Block Overview Panel"
+      ]
+    }
+  },
+  {
     "version": "v1.0.1",
     "date": "10/06/2026",
     "title": "Multi-request & Variable Sync Fix",
