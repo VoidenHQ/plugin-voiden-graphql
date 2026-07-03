@@ -1,31 +1,74 @@
 ## Extension: Voiden GraphQL
 
-Provides `gqlquery` and `gqlvariables` blocks for GraphQL API testing. Depends on `voiden-rest-api` for the underlying HTTP request.
+Provides `gqlquery`, `gqlurl`, `gqlbody`, `gqlvariables`, and `gqlsubscriptionevents` block types for GraphQL API testing. Insert with `/graphql` slash command.
 
-### gqlquery — GraphQL Query/Mutation/Subscription
+### gqlquery — GraphQL Request Container
+
+`gqlquery` is a **container** block that wraps `gqlurl` and `gqlbody` children. It is not wrapped inside a `request` block — it is a standalone top-level block.
 
 ```yaml
 ---
 type: gqlquery
 attrs:
   uid: "uid"
-  body: |
-    query GetUser($userId: ID!) {
-      user(id: $userId) {
-        id
-        name
-        email
-        posts {
-          title
+content:
+  - type: gqlurl
+    attrs:
+      uid: "uid"
+    content: "https://api.example.com/graphql"
+  - type: gqlbody
+    attrs:
+      uid: "uid"
+      body: |
+        query GetUser($userId: ID!) {
+          user(id: $userId) {
+            id
+            name
+            email
+          }
         }
-      }
-    }
-  operationType: query    # query | mutation | subscription
-  schemaUrl: null         # optional: URL to fetch schema from
+      operationType: query    # query | mutation | subscription
+      schemaUrl: null         # optional: URL to fetch GraphQL schema via introspection
+      schemaFileName: null    # optional: local .graphql schema file name
+      schemaFilePath: null    # optional: local .graphql schema file path
 ---
 ```
 
+### gqlurl — GraphQL Endpoint URL
+
+Child of `gqlquery`. Contains the endpoint URL as inline text content.
+
+```yaml
+- type: gqlurl
+  attrs:
+    uid: "uid"
+  content: "{{GRAPHQL_URL}}"
+```
+
+### gqlbody — GraphQL Query/Mutation/Subscription Body
+
+Child of `gqlquery`. Contains the query string and operation metadata.
+
+```yaml
+- type: gqlbody
+  attrs:
+    uid: "uid"
+    body: |
+      mutation CreateUser($input: CreateUserInput!) {
+        createUser(input: $input) {
+          id
+          name
+        }
+      }
+    operationType: mutation   # query | mutation | subscription
+    schemaUrl: null
+    schemaFileName: null
+    schemaFilePath: null
+```
+
 ### gqlvariables — GraphQL Variables
+
+Standalone block placed alongside `gqlquery`. Contains JSON variables for the query.
 
 ```yaml
 ---
@@ -33,6 +76,22 @@ type: gqlvariables
 attrs:
   uid: "uid"
   body: '{"userId": "{{USER_ID}}", "limit": 10}'
+---
+```
+
+### gqlsubscriptionevents — Subscription Events Viewer
+
+Standalone block for live subscription event display. Attrs are managed by the Voiden UI during a live subscription — do not set them manually.
+
+```yaml
+---
+type: gqlsubscriptionevents
+attrs:
+  uid: "uid"
+  subscriptionId: null
+  url: null
+  connected: false
+  events: []
 ---
 ```
 
@@ -50,20 +109,40 @@ generatedAt: 2025-01-15T10:30:00.000Z
 
 ```void
 ---
-type: request
+type: gqlquery
 attrs:
-  uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  uid: "gq1ery34-e5f6-7890-abcd-ef1234567890"
 content:
-  - type: method
+  - type: gqlurl
     attrs:
-      uid: "m1n2o3p4-e5f6-7890-abcd-ef1234567890"
-      method: POST
-      visible: true
-    content: POST
-  - type: url
-    attrs:
-      uid: "u1r2l3m4-e5f6-7890-abcd-ef1234567890"
+      uid: "gu1rl234-e5f6-7890-abcd-ef1234567890"
     content: "{{GRAPHQL_URL}}"
+  - type: gqlbody
+    attrs:
+      uid: "gb1ody34-e5f6-7890-abcd-ef1234567890"
+      body: |
+        query GetUser($userId: ID!) {
+          user(id: $userId) {
+            id
+            name
+            email
+          }
+        }
+      operationType: query
+      schemaUrl: null
+      schemaFileName: null
+      schemaFilePath: null
+---
+```
+
+### Variables
+
+```void
+---
+type: gqlvariables
+attrs:
+  uid: "gv1ars34-e5f6-7890-abcd-ef1234567890"
+  body: '{"userId": "{{USER_ID}}"}'
 ---
 ```
 
@@ -80,36 +159,5 @@ content:
     rows:
       - attrs: { disabled: false }
         row: [token, "{{API_TOKEN}}"]
----
-```
-
-### Query
-
-```void
----
-type: gqlquery
-attrs:
-  uid: "gq1ery34-e5f6-7890-abcd-ef1234567890"
-  body: |
-    query GetUser($userId: ID!) {
-      user(id: $userId) {
-        id
-        name
-        email
-      }
-    }
-  operationType: query
-  schemaUrl: null
----
-```
-
-### Variables
-
-```void
----
-type: gqlvariables
-attrs:
-  uid: "gv1ars34-e5f6-7890-abcd-ef1234567890"
-  body: '{"userId": "{{USER_ID}}"}'
 ---
 ```
