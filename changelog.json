@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.0.3",
+    "date": "03/07/2026",
+    "title": "Skill Documentation Rewrite",
+    "changes": {
+      "Improved": [
+        "AI skill documentation rewritten to accurately reflect the gqlquery container structure (gqlurl + gqlbody children), gqlsubscriptionevents node, correct block attr schemas with uid fields, and precise node hierarchy"
+      ]
+    }
+  },
+  {
     "version": "v1.0.2",
     "date": "16/06/2026",
     "title": "Block Overview Panel Integration",
