@@ -303,3 +303,30 @@ export const generateVariablesFromQuery = (
   
   return JSON.stringify(variables, null, 2);
 };
+
+const sortKeysDeep = (value: any): any => {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc: Record<string, any>, key) => {
+        acc[key] = sortKeysDeep(value[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+};
+
+/**
+ * Compares two JSON variable strings for equivalence regardless of key order.
+ * generateVariablesFromQuery emits keys in query-declaration order, which
+ * commonly differs from the on-disk key order without any real content change.
+ */
+export const areVariablesJSONEquivalent = (a: string, b: string): boolean => {
+  if (a === b) return true;
+  try {
+    return JSON.stringify(sortKeysDeep(JSON.parse(a))) === JSON.stringify(sortKeysDeep(JSON.parse(b)));
+  } catch {
+    return false;
+  }
+};

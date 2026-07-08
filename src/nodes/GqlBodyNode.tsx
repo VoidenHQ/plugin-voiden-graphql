@@ -43,7 +43,8 @@ import {
   loadSchemaFile as loadSchemaFileUtil,
   parseQueryFields,
   isOperationInQuery,
-  generateVariablesFromQuery
+  generateVariablesFromQuery,
+  areVariablesJSONEquivalent
 } from "../utils/graphql-parser";
 import { extractOperations, parseQuerySelections } from "../utils/query-parser";
 import { generateQuery } from "../utils/query-generator";
@@ -727,7 +728,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       const selectedArgs = operationArgSelections[firstOperation] || new Set();
       const currentVariables = variablesNode.attrs.body;
       const newVariables = generateVariablesFromQuery(body, currentVariables, firstOperation, selectedArgs);
-      if (newVariables !== currentVariables) {
+      if (!areVariablesJSONEquivalent(newVariables, currentVariables)) {
         const tr = props.editor.state.tr;
         tr.setNodeMarkup(variablesNodePos, null, { ...variablesNode.attrs, body: newVariables });
         props.editor.view.dispatch(tr);
