@@ -286,7 +286,16 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       return extractOperations(editorQuery || props.node.attrs.body || '');
     }, [editorQuery, props.node.attrs.body]);
 
+    // Skip the very first run — that fires on initial mount from loaded file
+    // content, and correcting operationType there would mutate the freshly
+    // opened document and mark it dirty before the user has touched anything.
+    // Only correct it in response to a subsequent, real query edit.
+    const isFirstOperationTypeSyncRef = React.useRef(true);
     React.useEffect(() => {
+      if (isFirstOperationTypeSyncRef.current) {
+        isFirstOperationTypeSyncRef.current = false;
+        return;
+      }
       if (availableOperations.length > 0) {
         const firstOp = availableOperations[0];
         if (firstOp && firstOp.type !== props.node.attrs.operationType) {
@@ -739,7 +748,18 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       syncVariablesWithBody(props.node.attrs.body);
     }, [props.node.attrs.body, syncVariablesWithBody]);
 
-    React.useEffect(() => { syncVariables(); }, [syncVariables]);
+    // Skip the very first run — same reasoning as the operationType sync
+    // above: on initial mount from loaded content, populating/rewriting the
+    // variables block mutates a freshly opened, unedited document and marks
+    // it dirty. Only sync in response to a subsequent, real query edit.
+    const isFirstVariablesSyncRef = React.useRef(true);
+    React.useEffect(() => {
+      if (isFirstVariablesSyncRef.current) {
+        isFirstVariablesSyncRef.current = false;
+        return;
+      }
+      syncVariables();
+    }, [syncVariables]);
 
     const hasSchema = (props.node.attrs.schemaFileName || props.node.attrs.schemaUrl) && schema;
     const isEditable = props.editor.isEditable;
