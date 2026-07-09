@@ -282,7 +282,7 @@ export default function createGraphQLPlugin(context: PluginContext) {
                   {
                     type: 'gqlvariables',
                     attrs: {
-                      body: '{}',
+                      body: '{\n  \n}',
                     },
                   },
                   {

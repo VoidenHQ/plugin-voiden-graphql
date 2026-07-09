@@ -38,8 +38,18 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
     const isImported = !!props.node.attrs.importedFrom;
     const isEditable = props.editor.isEditable;
 
-    // Ensure the node always has a valid JSON body with proper formatting
+    // Ensure the node always has a valid JSON body with proper formatting.
+    // Skip the very first run — that fires on initial mount from loaded file
+    // content, and a saved, valid "{}" (no variables) is not malformed data
+    // that needs fixing; rewriting it on load mutates a freshly opened,
+    // unedited document and marks it dirty before the user has touched
+    // anything. Only normalize in response to a subsequent real change.
+    const isFirstNormalizeRef = React.useRef(true);
     React.useEffect(() => {
+      if (isFirstNormalizeRef.current) {
+        isFirstNormalizeRef.current = false;
+        return;
+      }
       if (!isEditable) return;
       let body = props.node.attrs.body;
 
@@ -57,7 +67,7 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
       if (!body || (typeof body === 'string' && (body.trim() === '' || body === '{}'))) {
         props.updateAttributes({ body: '{\n  \n}' });
       }
-    }, []);
+    }, [props.node.attrs.body]);
 
     // Handle autofocus on creation (only for non-imported blocks)
     React.useEffect(() => {
