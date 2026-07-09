@@ -43,8 +43,6 @@ import {
   loadSchemaFile as loadSchemaFileUtil,
   parseQueryFields,
   isOperationInQuery,
-  generateVariablesFromQuery,
-  areVariablesJSONEquivalent
 } from "../utils/graphql-parser";
 import { extractOperations, parseQuerySelections } from "../utils/query-parser";
 import { generateQuery } from "../utils/query-generator";
@@ -380,7 +378,12 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     const handleEditorChange = (newContent: string) => {
       setEditorQuery(newContent);
       props.updateAttributes({ body: newContent });
-      syncVariablesWithBody(newContent);
+      // Variables are no longer synced from every keystroke here — while
+      // typing, a variable name passes through incomplete/intermediate
+      // states (e.g. renamed mid-edit even momentarily), and syncing on
+      // each of those drops the old key's value permanently, even once the
+      // final text matches the original again. Use the Resync button in
+      // the gqlvariables block instead, which only runs on an explicit click.
       if (schema) {
         const operations = extractOperations(newContent);
         const newSelectedOperations = new Set<string>();
@@ -685,81 +688,12 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       }
     }, [selectedOperations, operationFieldSelections, fieldArgSelections, operationArgSelections, nestedFieldSelections, schema, activeTab, mode]);
 
-    // Core sync logic — takes the body explicitly so it can be called with fresh
-    // content before React has re-rendered with updated props.
-    const syncVariablesWithBody = React.useCallback((body: string) => {
-      if (!body) return;
-      const operations = extractOperations(body);
-      const firstOperation = operations[0]?.name;
-      if (!firstOperation) return;
-
-      const doc = props.editor.state.doc;
-      const bodyPos = typeof props.getPos === 'function' ? props.getPos() : null;
-
-      const topLevel: Array<{ type: string; node: any; pos: number }> = [];
-      doc.forEach((node: any, pos: number) => {
-        topLevel.push({ type: node.type.name, node, pos });
-      });
-
-      let ourQueryIdx = -1;
-      if (bodyPos != null) {
-        for (let i = 0; i < topLevel.length; i++) {
-          const { type, node, pos } = topLevel[i];
-          if (type === 'gqlquery' && bodyPos > pos && bodyPos < pos + node.nodeSize) {
-            ourQueryIdx = i;
-            break;
-          }
-        }
-      }
-      if (ourQueryIdx === -1) {
-        for (let i = topLevel.length - 1; i >= 0; i--) {
-          if (topLevel[i].type === 'gqlquery') { ourQueryIdx = i; break; }
-        }
-      }
-      if (ourQueryIdx === -1) return;
-
-      let variablesNode: any = null;
-      let variablesNodePos: number | null = null;
-      for (let i = ourQueryIdx + 1; i < topLevel.length; i++) {
-        const t = topLevel[i].type;
-        if (t === 'gqlquery' || t === 'request-separator') break;
-        if (t === 'gqlvariables') { variablesNode = topLevel[i].node; variablesNodePos = topLevel[i].pos; break; }
-      }
-      if (!variablesNode) {
-        for (let i = ourQueryIdx - 1; i >= 0; i--) {
-          const t = topLevel[i].type;
-          if (t === 'gqlquery' || t === 'request-separator') break;
-          if (t === 'gqlvariables') { variablesNode = topLevel[i].node; variablesNodePos = topLevel[i].pos; break; }
-        }
-      }
-
-      if (!variablesNode || variablesNodePos == null) return;
-      const selectedArgs = operationArgSelections[firstOperation] || new Set();
-      const currentVariables = variablesNode.attrs.body;
-      const newVariables = generateVariablesFromQuery(body, currentVariables, firstOperation, selectedArgs);
-      if (!areVariablesJSONEquivalent(newVariables, currentVariables)) {
-        const tr = props.editor.state.tr;
-        tr.setNodeMarkup(variablesNodePos, null, { ...variablesNode.attrs, body: newVariables });
-        props.editor.view.dispatch(tr);
-      }
-    }, [operationArgSelections, props.editor, props.getPos]);
-
-    const syncVariables = React.useCallback(() => {
-      syncVariablesWithBody(props.node.attrs.body);
-    }, [props.node.attrs.body, syncVariablesWithBody]);
-
-    // Skip the very first run — same reasoning as the operationType sync
-    // above: on initial mount from loaded content, populating/rewriting the
-    // variables block mutates a freshly opened, unedited document and marks
-    // it dirty. Only sync in response to a subsequent, real query edit.
-    const isFirstVariablesSyncRef = React.useRef(true);
-    React.useEffect(() => {
-      if (isFirstVariablesSyncRef.current) {
-        isFirstVariablesSyncRef.current = false;
-        return;
-      }
-      syncVariables();
-    }, [syncVariables]);
+    // Variables are never auto-synced from query edits — typing passes through
+    // incomplete/intermediate variable names, and syncing on those permanently
+    // drops the old name's value even once the final text is correct again.
+    // The gqlvariables block's own Resync button (VariablesNode.tsx) is the
+    // only way variables get regenerated, so it only ever runs on an explicit
+    // click, never as a side effect of typing or of opening the file.
 
     const hasSchema = (props.node.attrs.schemaFileName || props.node.attrs.schemaUrl) && schema;
     const isEditable = props.editor.isEditable;

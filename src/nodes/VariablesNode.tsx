@@ -7,7 +7,9 @@
 import React from "react";
 import { mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, RefreshCw } from "lucide-react";
+import { extractOperations } from "../utils/query-parser";
+import { generateVariablesFromQuery, areVariablesJSONEquivalent } from "../utils/graphql-parser";
 
 const prettifyJSON = (json: string) => {
   try {
@@ -17,17 +19,68 @@ const prettifyJSON = (json: string) => {
   }
 };
 
+// Finds the gqlbody paired with this gqlvariables node — same-section nearest
+// gqlquery, mirroring GqlBodyNode's forward search but starting from the
+// variables node and looking both directions.
+const findPairedQueryBody = (editor: any, getPos: () => number | undefined): string | null => {
+  const pos = typeof getPos === 'function' ? getPos() : null;
+  if (pos == null) return null;
+  const doc = editor.state.doc;
+
+  const topLevel: Array<{ type: string; node: any; pos: number }> = [];
+  doc.forEach((node: any, p: number) => topLevel.push({ type: node.type.name, node, pos: p }));
+
+  let ourIdx = -1;
+  for (let i = 0; i < topLevel.length; i++) {
+    const { pos: p, node } = topLevel[i];
+    if (p === pos) { ourIdx = i; break; }
+    if (pos > p && pos < p + node.nodeSize) { ourIdx = i; break; }
+  }
+  if (ourIdx === -1) return null;
+
+  const findGqlBody = (queryNode: any): string | null => {
+    let body: string | null = null;
+    queryNode.forEach((child: any) => {
+      if (body == null && child.type.name === 'gqlbody') body = child.attrs.body || '';
+    });
+    return body;
+  };
+
+  for (let i = ourIdx + 1; i < topLevel.length; i++) {
+    const t = topLevel[i].type;
+    if (t === 'gqlvariables' || t === 'request-separator') break;
+    if (t === 'gqlquery') return findGqlBody(topLevel[i].node);
+  }
+  for (let i = ourIdx - 1; i >= 0; i--) {
+    const t = topLevel[i].type;
+    if (t === 'gqlvariables' || t === 'request-separator') break;
+    if (t === 'gqlquery') return findGqlBody(topLevel[i].node);
+  }
+  return null;
+};
+
 export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any, RequestBlockHeader: any) => {
-  const Actions = ({ setText }: { setText: () => void }) => {
+  const Actions = ({ setText, onResync }: { setText: () => void; onResync: () => void }) => {
     return (
-      <button
-        className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono text-comment hover:text-text transition-colors opacity-60 hover:opacity-100"
-        onClick={setText}
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-      >
-        <Sparkles size={11} />
-        <span>PRETTIFY</span>
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono text-comment hover:text-text transition-colors opacity-60 hover:opacity-100"
+          onClick={onResync}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+          title="Regenerate variables from the paired query"
+        >
+          <RefreshCw size={11} />
+          <span>RESYNC</span>
+        </button>
+        <button
+          className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono text-comment hover:text-text transition-colors opacity-60 hover:opacity-100"
+          onClick={setText}
+          style={{ cursor: 'pointer', userSelect: 'none' }}
+        >
+          <Sparkles size={11} />
+          <span>PRETTIFY</span>
+        </button>
+      </div>
     );
   };
 
@@ -90,6 +143,24 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
       } catch {}
     };
 
+    // Manual resync — the only other way (besides typing in the query
+    // itself) that variables get regenerated. No automatic/mount-driven
+    // trigger, so opening a file never rewrites this block on its own.
+    const handleResync = () => {
+      try {
+        const queryBody = findPairedQueryBody(props.editor, props.getPos);
+        if (!queryBody) return;
+        const operations = extractOperations(queryBody);
+        const firstOperation = operations[0]?.name;
+        if (!firstOperation) return;
+        const currentVariables = props.node.attrs.body || '{}';
+        const newVariables = generateVariablesFromQuery(queryBody, currentVariables, firstOperation);
+        if (!areVariablesJSONEquivalent(newVariables, currentVariables)) {
+          props.updateAttributes({ body: newVariables });
+        }
+      } catch {}
+    };
+
     return (
       <NodeViewWrapper>
         <div className="my-2">
@@ -97,7 +168,7 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
             title="GRAPHQL-VARIABLES"
             withBorder={false}
             editor={props.editor}
-            actions={!isImported && isEditable ? <Actions setText={handlePrettify} /> : undefined}
+            actions={!isImported && isEditable ? <Actions setText={handlePrettify} onResync={handleResync} /> : undefined}
           />
           <div style={{ height: 'auto' }}>
             <CodeEditor

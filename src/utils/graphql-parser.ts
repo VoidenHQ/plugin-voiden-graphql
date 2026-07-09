@@ -286,21 +286,32 @@ export const generateVariablesFromQuery = (
     }
   }
   
-  // For each extracted variable, use existing value or generate default
-  // Only include if no selectedArgs filter, or if the arg is selected
+  // Detect a simple rename: exactly one variable name disappeared from the
+  // query and exactly one new one appeared. Renaming a $var is not the same
+  // as deleting one variable and adding an unrelated one — carry the old
+  // value over under the new name instead of resetting it to a type default.
+  const newNames = Object.keys(extractedVars).filter((n) => !(n in existing));
+  const removedNames = Object.keys(existing).filter((n) => !(n in extractedVars));
+  const renamedFrom = newNames.length === 1 && removedNames.length === 1 ? removedNames[0] : null;
+
+  // For each extracted variable, use existing value (or the renamed-from
+  // value) or generate a default. Only include if no selectedArgs filter,
+  // or if the arg is selected.
   for (const [varName, varType] of Object.entries(extractedVars)) {
     // Skip if selectedArgs is provided and this arg is not selected
     if (selectedArgs && selectedArgs.size > 0 && !selectedArgs.has(varName)) {
       continue;
     }
-    
+
     if (varName in existing) {
       variables[varName] = existing[varName];
+    } else if (renamedFrom && varName === newNames[0]) {
+      variables[varName] = existing[renamedFrom];
     } else {
       variables[varName] = getDefaultValueForType(varType);
     }
   }
-  
+
   return JSON.stringify(variables, null, 2);
 };
 

@@ -2,10 +2,17 @@
   {
     "version": "v1.0.4",
     "date": "08/07/2026",
-    "title": "False Unsaved-Changes Fix",
+    "title": "False Unsaved-Changes Fix & Manual Variable Sync",
     "changes": {
+      "Added": [
+        "A Resync button in the GraphQL Variables block — regenerates variables from the paired query on demand"
+      ],
+      "Changed": [
+        "Variables are no longer auto-synced from every keystroke while editing the query — typing passes through incomplete/intermediate variable names, and syncing on those could permanently reset a variable's value to a blank default even after the query text was corrected back. Variables now only update from an explicit query edit or a click of the Resync button",
+        "Resyncing variables after renaming a $variable in the query now carries its existing value over to the new name instead of resetting it to a type default"
+      ],
       "Fixed": [
-        "Opening a .void file with a multi-variable GraphQL request no longer immediately marks the tab as having unsaved changes — the variable-sync effect was rewriting the variables block on load whenever its key order differed from the query's declaration order, even when the values were identical"
+        "Opening a .void file with a GraphQL request no longer immediately marks the tab as having unsaved changes — this had several causes: the variable-sync and operationType-correction effects ran on the very first mount (loading from disk), the variables block was reformatted on load even when its saved value was already valid, and the on-load vs. live-editor comparison itself had structural mismatches (attrs materialized with schema-default values, empty content arrays, and variables JSON key ordering) that made a freshly opened, unedited file compare as changed"
       ]
     }
   },
