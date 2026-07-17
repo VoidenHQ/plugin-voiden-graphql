@@ -50,20 +50,23 @@ export default function createGraphQLPlugin(context: PluginContext) {
         'gqlsubscriptionevents',
       ]);
 
+      // docsUrl defaults every block to the voiden-blocks root for now — per-block deep link paths TBD.
+      const DOCS_URL = "https://docs.voiden.md/docs/core-features-section/voiden-blocks/graphql-query";
       (context as any).registerBlockOutlineMeta({
         gqlquery: {
           label: "GraphQL Query",
           icon: "Zap",
+          docsUrl: DOCS_URL,
           getPreview: (_attrs: Record<string, any>, textContent: string) => {
             if (!textContent) return undefined;
             const trimmed = textContent.trim();
             return trimmed.length > 50 ? trimmed.slice(0, 50) + "…" : trimmed || undefined;
           },
         },
-        gqlurl: { label: "URL", icon: "Globe" },
-        gqlbody: { label: "Query Body", icon: "Braces" },
-        gqlvariables: { label: "Variables", icon: "Variable" },
-        gqlsubscriptionevents: { label: "Subscription Events", icon: "Radio" },
+        gqlurl: { label: "URL", icon: "Globe", docsUrl: DOCS_URL },
+        gqlbody: { label: "Query Body", icon: "Braces", docsUrl: DOCS_URL },
+        gqlvariables: { label: "Variables", icon: "Variable", docsUrl: "https://docs.voiden.md/docs/core-features-section/voiden-blocks/graphql-variable" },
+        gqlsubscriptionevents: { label: "Subscription Events", icon: "Radio", docsUrl: DOCS_URL },
       });
 
       // Register request building handler
