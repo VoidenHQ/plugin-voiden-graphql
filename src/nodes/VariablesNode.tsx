@@ -169,6 +169,7 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
             withBorder={false}
             editor={props.editor}
             actions={!isImported && isEditable ? <Actions setText={handlePrettify} onResync={handleResync} /> : undefined}
+            blockType="gqlvariables"
           />
           <div style={{ height: 'auto' }}>
             <CodeEditor

@@ -64,6 +64,7 @@ export const createGraphQLQueryNode = (NodeViewWrapper: any, _CodeEditor: any, R
             withBorder={false}
             editor={props.editor}
             importedDocumentId={props.node.attrs.importedFrom}
+            blockType="gqlquery"
           />
           <NodeViewContent />
         </div>

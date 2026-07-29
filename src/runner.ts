@@ -87,6 +87,18 @@ export function buildRequest(blocks: Block[]): RestApiRequestState | null {
 const createGraphQLRunner: RunnerFactory = (context: RunnerContext) => {
   return {
     onload() {
+      // ── Request container registration ────────────────────────────────────
+      // Tells voiden-runner's MCP tools (list_requests/write_result) how to
+      // find "the request" block and its URL for this protocol. GraphQL has
+      // no method child — it's always an HTTP POST.
+      // Cast to any: registerRequestContainer is a host capability not yet in
+      // the published @voiden/sdk RunnerContext type.
+      ;(context as any).registerRequestContainer?.({
+        type: 'gqlquery',
+        urlType: 'gqlurl',
+        defaultMethod: 'POST',
+      })
+
       // ── Request builder ───────────────────────────────────────────────────
       // Registers with the shared RequestOrchestrator. If this plugin is disabled
       // its handler is never registered → GraphQL requests fail gracefully.

@@ -8,6 +8,7 @@ import type { CorePluginContext } from '@voiden/sdk/ui';
 type PluginContext = CorePluginContext;
 import { parseGraphQLVariablesBody, resolveGraphQLBlocks } from './lib/graphqlBlocks';
 import { parseGraphQLOperation } from './lib/utils';
+import { GraphQLQueryHelp, GraphQLVariablesHelp } from './help/index';
 import manifest from '../manifest.json';
 
 export default function createGraphQLPlugin(context: PluginContext) {
@@ -67,6 +68,12 @@ export default function createGraphQLPlugin(context: PluginContext) {
         gqlbody: { label: "Query Body", icon: "Braces", docsUrl: DOCS_URL },
         gqlvariables: { label: "Variables", icon: "Variable", docsUrl: "https://docs.voiden.md/docs/core-features-section/voiden-blocks/graphql-variable" },
         gqlsubscriptionevents: { label: "Subscription Events", icon: "Radio", docsUrl: DOCS_URL },
+      });
+
+      // Inline block "?" help tooltip (RequestBlockHeader)
+      (context as any).registerBlockHelp?.({
+        gqlquery: GraphQLQueryHelp,
+        gqlvariables: GraphQLVariablesHelp,
       });
 
       // Register request building handler
