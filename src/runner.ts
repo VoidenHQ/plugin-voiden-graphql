@@ -90,9 +90,22 @@ const createGraphQLRunner: RunnerFactory = (context: RunnerContext) => {
       // ── Request builder ───────────────────────────────────────────────────
       // Registers with the shared RequestOrchestrator. If this plugin is disabled
       // its handler is never registered → GraphQL requests fail gracefully.
+      //
+      // onBuildRequest handlers run in plugin-load order (registry order — not
+      // guaranteed before/after voiden-advanced-auth's own handler), each
+      // receiving the previous handler's output as `request`. buildRequest()
+      // always returns a fresh headers array (just Content-Type + headers-table
+      // rows), so we append it onto whatever's already in `request` instead of
+      // replacing it — otherwise an auth-block header contributed by
+      // voiden-advanced-auth's handler running first would be silently dropped.
       context.onBuildRequest((request, blocks) => {
         const built = buildRequest(blocks)
-        return built ?? request
+        if (!built) return request
+        const priorHeaders = Array.isArray((request as any)?.headers) ? (request as any).headers : []
+        return {
+          ...built,
+          headers: [...priorHeaders, ...built.headers],
+        }
       })
     },
   }
