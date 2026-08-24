@@ -2,6 +2,8 @@
 
 Provides `gqlquery`, `gqlurl`, `gqlbody`, `gqlvariables`, and `gqlsubscriptionevents` block types for GraphQL API testing. Insert with `/graphql` slash command.
 
+> **Singleton per section:** `gqlquery` and `gqlvariables` are each allowed at most once per section (independently of each other — one of each is the normal shape).
+
 ### gqlquery — GraphQL Request Container
 
 `gqlquery` is a **container** block that wraps `gqlurl` and `gqlbody` children. It is not wrapped inside a `request` block — it is a standalone top-level block.

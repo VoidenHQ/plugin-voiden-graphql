@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.0.7",
+    "date": "24/08/2026",
+    "title": "Docs: Skill Now Documents Singleton Block Rules",
+    "changes": {
+      "Fixed": [
+        "The bundled skill.md now documents that gqlquery and gqlvariables are each allowed at most once per request section (independently of each other). Previously undocumented, which could lead an AI agent to insert duplicates of either block."
+      ]
+    }
+  },
+  {
     "version": "v1.0.6",
     "date": "29/07/2026",
     "title": "Headless Request-Build Merge Fix & Inline Block Help",
