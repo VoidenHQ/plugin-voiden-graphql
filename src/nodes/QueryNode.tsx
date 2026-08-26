@@ -47,8 +47,15 @@ export const createGraphQLQueryNode = (NodeViewWrapper: any, _CodeEditor: any, R
 
       if (!gqlUrlNode || !gqlBodyNode) return;
 
+      // Only body/operationType/schemaFileName/schemaFilePath/schemaUrl/endpoint actually
+      // moved onto the new child nodes above — everything else on the container (uid,
+      // pluginId, pluginVersion, importedFrom, ...) must carry over unchanged. Passing just
+      // `{ importedFrom }` here previously dropped `uid`, silently orphaning the block's
+      // identity so anything that looks it up afterward (write_result, list_requests'
+      // requestUid, linkedBlock targets) could no longer find it.
+      const { body: _body, operationType: _operationType, schemaFileName: _schemaFileName, schemaFilePath: _schemaFilePath, schemaUrl: _schemaUrl, endpoint: _endpoint, ...containerAttrs } = node.attrs;
       const newNode = schema.nodes.gqlquery.create(
-        { importedFrom: node.attrs.importedFrom },
+        containerAttrs,
         [gqlUrlNode, gqlBodyNode]
       );
 
