@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.0.8",
+    "date": "10/09/2026",
+    "title": "Fix: gqlquery Migration Dropped the Block's Identity",
+    "changes": {
+      "Fixed": [
+        "The in-editor migration that upgrades an old-format gqlquery block (body/endpoint attrs) into the new gqlurl/gqlbody children rebuilt the container's attrs from scratch as just { importedFrom }, silently dropping uid, pluginId, and pluginVersion. Once migrated, the block had no identity left — voiden-runner's write_result/list_requests (uid-keyed) and any linkedBlock targeting it could no longer find it, with no indication of why. Only the attrs that actually moved onto the new children (body/operationType/schemaFileName/schemaFilePath/schemaUrl/endpoint) are stripped now — everything else on the container carries over unchanged. Mirrors the identical fix already made in the Voiden app's own parse-time migration."
+      ]
+    }
+  },
+  {
     "version": "v1.0.7",
     "date": "24/08/2026",
     "title": "Docs: Skill Now Documents Singleton Block Rules",
