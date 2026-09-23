@@ -66,8 +66,6 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     const [expandedOperations, setExpandedOperations] = React.useState<Set<string>>(new Set());
     const [selectedOperations, setSelectedOperations] = React.useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = React.useState<'query' | 'mutation' | 'subscription'>('query');
-    const [showConnectionInput, setShowConnectionInput] = React.useState(false);
-    const [connectionUrl, setConnectionUrl] = React.useState(props.node.attrs.schemaUrl || '');
     const [isConnecting, setIsConnecting] = React.useState(false);
     const [connectionError, setConnectionError] = React.useState('');
 
@@ -97,26 +95,32 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     }, [props.editor.state, props.node.attrs.importedFrom]);
 
 
-    // Pre-fill connectionUrl from doc URL node
-    React.useEffect(() => {
-      if (showConnectionInput && !connectionUrl) {
-        const doc = props.editor.state.doc;
-        let foundUrl = '';
-        doc.descendants((node: any) => {
-          if (node.type.name === 'url' && node.textContent) {
-            foundUrl = node.textContent;
-            return false;
+    // The GraphQL endpoint URL already lives on the sibling gqlurl node (the
+    // request's own URL field) — introspection reuses that directly instead of
+    // asking for a second, separately-typed URL. Walk up to the enclosing
+    // gqlquery container and read its gqlurl child's live text.
+    const requestUrl = React.useMemo(() => {
+      if (typeof props.getPos !== 'function') return '';
+      const pos = props.getPos();
+      if (typeof pos !== 'number') return '';
+      try {
+        const $pos = props.editor.state.doc.resolve(pos);
+        for (let d = $pos.depth - 1; d >= 0; d--) {
+          const ancestor = $pos.node(d);
+          if (ancestor.type.name === 'gqlquery') {
+            let found = '';
+            ancestor.descendants((node: any) => {
+              if (node.type.name === 'gqlurl') {
+                found = node.textContent || '';
+                return false;
+              }
+            });
+            return found;
           }
-        });
-        setConnectionUrl(foundUrl || 'http://');
-      }
-    }, [showConnectionInput]);
-
-    React.useEffect(() => {
-      if ((props.node.attrs.schemaUrl ?? '') !== connectionUrl) {
-        props.updateAttributes({ schemaUrl: connectionUrl || null });
-      }
-    }, [connectionUrl]);
+        }
+      } catch (e) {}
+      return '';
+    }, [props.editor.state, props.getPos]);
 
     const introspectionQuery = `
       query IntrospectionQuery {
@@ -235,8 +239,8 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     };
 
     const handleConnect = async () => {
-      if (!connectionUrl || connectionUrl === 'http://') {
-        setConnectionError('Please enter a valid URL');
+      if (!requestUrl) {
+        setConnectionError('Enter the request URL above first');
         return;
       }
       setIsConnecting(true);
@@ -244,7 +248,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       try {
         const requestState = {
           method: 'POST',
-          url: connectionUrl,
+          url: requestUrl,
           headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
           body: JSON.stringify({ query: introspectionQuery }),
           queryParams: [],
@@ -267,8 +271,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
         const parsedSchema = parseIntrospectionToSchema(data);
         if (parsedSchema) {
           setSchema(parsedSchema);
-          props.updateAttributes({ schemaUrl: connectionUrl, schemaFileName: null, schemaFilePath: null });
-          setShowConnectionInput(false);
+          props.updateAttributes({ schemaUrl: requestUrl, schemaFileName: null, schemaFilePath: null });
           setConnectionError('');
         } else {
           setConnectionError('Failed to parse schema.');
@@ -360,7 +363,10 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
         };
         const response = await (window as any).electron?.request?.sendSecure(requestState);
         if (!response || !response.status || response.status < 200 || response.status >= 300) {
-          setShowConnectionInput(true);
+          // Drop the stale schemaUrl so the schema selector falls back to the
+          // import/introspect buttons — the Link button re-tries against the
+          // request's current URL, and the error is visible there.
+          props.updateAttributes({ schemaUrl: null });
           setConnectionError('Failed to load schema from URL: ' + response?.statusText);
           return;
         }
@@ -702,18 +708,25 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       <NodeViewWrapper>
         <div>
           {/* Schema file selector */}
-          {!props.node.attrs.schemaFileName && !props.node.attrs.schemaUrl && !showConnectionInput ? (
+          {!props.node.attrs.schemaFileName && !props.node.attrs.schemaUrl ? (
             isEditable ? (
               <div className="bg-panel border-t border-b border-border px-3 py-2">
                 <input ref={fileInputRef} type="file" accept=".graphql,.gql" onChange={handleFileSelect} className="hidden" id="graphql-schema-input" />
                 <div className="flex items-center gap-3">
-                  <button type="button" className="text-sm text-accent hover:text-accent/80 transition-colors cursor-pointer flex items-center gap-1.5 group" onClick={() => { setShowConnectionInput(false); fileInputRef.current?.click(); }} title="Import schema">
+                  <button type="button" className="text-sm text-accent hover:text-accent/80 transition-colors cursor-pointer flex items-center gap-1.5 group" onClick={() => fileInputRef.current?.click()} title="Import schema">
                     <FileDown className="w-4 h-4" />
                   </button>
-                  <button type="button" className="text-sm text-accent hover:text-accent/80 transition-colors cursor-pointer flex items-center gap-1.5 group" onClick={() => setShowConnectionInput(!showConnectionInput)} title="Connect to GraphQL endpoint">
-                    <Link className="w-4 h-4" />
+                  {/* Introspects the URL already entered in the request's own url field
+                      above — no separate endpoint URL to type in here. */}
+                  <button type="button" disabled={isConnecting} className="text-sm text-accent hover:text-accent/80 transition-colors cursor-pointer flex items-center gap-1.5 group disabled:opacity-60" onClick={handleConnect} title="Fetch schema by introspecting the request URL">
+                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link className="w-4 h-4" />}
                   </button>
                 </div>
+                {connectionError && (
+                  <div className="pt-2 text-xs italic text-red-400 flex items-center gap-2">
+                    <CircleX size={14} /> {connectionError}
+                  </div>
+                )}
               </div>
             ) : null
           ) : (
@@ -729,36 +742,12 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
                     onClick={() => {
                       props.updateAttributes({ schemaFileName: null, schemaFilePath: null, schemaUrl: null });
                       setSchema(null);
-                      setShowConnectionInput(false);
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}>
                     <X size={14} />
                   </button>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Connection URL input */}
-          {isEditable && showConnectionInput && !props.node.attrs.schemaFileName && (
-            <div className="bg-panel border-b border-border px-3 py-2">
-              <div className="flex items-center gap-2">
-                <input type="text" value={connectionUrl} onChange={(e) => { setConnectionUrl(e.target.value); if (connectionError) setConnectionError(''); }}
-                  placeholder="http://"
-                  className="flex-1 px-3 py-1.5 bg-editor border border-border rounded text-sm text-text placeholder-comment focus:outline-none focus:border-accent transition-colors font-mono"
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) handleConnect(); }}
-                />
-                <button onClick={handleConnect} disabled={isConnecting}
-                  className="px-3 py-1.5 bg-accent hover:bg-accent/80 disabled:bg-accent/50 text-white rounded text-sm flex items-center gap-1.5 transition-colors"
-                  title="Connect to endpoint">
-                  {isConnecting ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Connecting...</span></>) : (<><Link className="w-4 h-4" /><span>Connect</span></>)}
-                </button>
-              </div>
-              {connectionError && (
-                <div className="p-2 text-xs italic text-red-400 flex items-center gap-2">
-                  <CircleX size={14} /> {connectionError}
-                </div>
-              )}
             </div>
           )}
 
