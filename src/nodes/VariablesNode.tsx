@@ -10,14 +10,8 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { extractOperations } from "../utils/query-parser";
 import { generateVariablesFromQuery, areVariablesJSONEquivalent } from "../utils/graphql-parser";
+import { prettifyIfValidJson, prettifyJson } from "../utils/prettifyJson";
 
-const prettifyJSON = (json: string) => {
-  try {
-    return JSON.stringify(JSON.parse(json), null, 2);
-  } catch {
-    return json;
-  }
-};
 
 // Finds the gqlbody paired with this gqlvariables node — same-section nearest
 // gqlquery, mirroring GqlBodyNode's forward search but starting from the
@@ -138,7 +132,7 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
     const handlePrettify = () => {
       try {
         const currentValue = props.node.attrs.body || '{}';
-        const prettified = prettifyJSON(currentValue);
+        const prettified = prettifyJson(currentValue);
         props.updateAttributes({ body: prettified });
       } catch {}
     };
@@ -198,11 +192,7 @@ export const createGraphQLVariablesNode = (NodeViewWrapper: any, CodeEditor: any
           default: '{\n  \n}',
           parseHTML: (element: any) => {
             const content = element.textContent || "";
-            try {
-              return content ? JSON.stringify(JSON.parse(content), null, 2) : '{\n  \n}';
-            } catch {
-              return content || '{\n  \n}';
-            }
+            return content ? prettifyIfValidJson(content) : '{\n  \n}';
           },
         },
         importedFrom: {
