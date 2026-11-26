@@ -8,6 +8,7 @@ import type { CorePluginContext } from '@voiden/sdk/ui';
 type PluginContext = CorePluginContext;
 import { parseGraphQLVariablesBody, resolveGraphQLBlocks } from './lib/graphqlBlocks';
 import { parseGraphQLOperation } from './lib/utils';
+import { readAuth, readTableHeaders } from './lib/requestHeaders';
 import { GraphQLQueryHelp, GraphQLVariablesHelp } from './help/index';
 import manifest from '../manifest.json';
 
@@ -114,92 +115,9 @@ export default function createGraphQLPlugin(context: PluginContext) {
           const url = (typeof gqlUrlText === 'string' ? gqlUrlText : '') ||
             gqlNode.attrs?.endpoint || gqlNode.attrs?.schemaUrl || '';
 
-          // Read headers from the TipTap table structure (headers-table > table > tableRow > tableCell)
-          const readTableHeaders = (type: string) => {
-            const result: Array<{key: string, value: string, enabled: boolean}> = [];
-            editorJson.content?.forEach((rootNode: any) => {
-              if (rootNode.type !== type) return;
-              rootNode.content?.forEach((node: any) => {
-                if (node.type !== 'table') return;
-                node.content?.forEach((rowNode: any) => {
-                  if (rowNode.type !== 'tableRow' || rowNode.attrs?.disabled) return;
-                  let key = '', value = '';
-                  rowNode.content?.forEach((cellNode: any, cellIndex: number) => {
-                    if (cellNode.type === 'tableCell') {
-                      const text = (cellNode.content?.[0]?.content?.[0]?.text || '').trim();
-                      if (cellIndex === 0) key = text;
-                      else if (cellIndex === 1) value = text;
-                    }
-                  });
-                  if (key) result.push({ key, value, enabled: true });
-                });
-              });
-            });
-            return result;
-          };
-
-          // Read auth node and map to orchestrator format
-          const readAuth = () => {
-            const authNode = editorJson.content?.find((n: any) => n.type === 'auth');
-            if (!authNode?.attrs) return undefined;
-            const authType = authNode.attrs.authType;
-            if (!authType || authType === 'inherit' || authType === 'none') return undefined;
-            const typeMapping: Record<string, string> = {
-              bearer: 'bearer-token', basic: 'basic-auth', apiKey: 'api-key',
-              oauth2: 'oauth2', oauth1: 'oauth1', digest: 'digest-auth',
-              ntlm: 'ntlm', awsSignature: 'aws-signature', hawk: 'hawk',
-            };
-            const mappedType = typeMapping[authType];
-            if (!mappedType) return undefined;
-            const config: Record<string, string> = {};
-            authNode.content?.forEach((node: any) => {
-              if (node.type === 'table') {
-                node.content?.forEach((rowNode: any) => {
-                  if (rowNode.type === 'tableRow') {
-                    let k = '', v = '';
-                    rowNode.content?.forEach((cellNode: any, idx: number) => {
-                      if (cellNode.type === 'tableCell') {
-                        const text = (cellNode.content?.[0]?.content?.[0]?.text || '').trim();
-                        if (idx === 0) k = text; else if (idx === 1) v = text;
-                      }
-                    });
-                    if (k) config[k] = v;
-                  }
-                });
-              }
-            });
-            let finalConfig: any = config;
-            if (authType === 'bearer') finalConfig = { token: config.token || '' };
-            else if (authType === 'basic') finalConfig = { username: config.username || '', password: config.password || '' };
-            else if (authType === 'apiKey') finalConfig = { key: config.key || '', value: config.value || '', in: config.add_to || 'header' };
-            else if (authType === 'oauth2') {
-              let oauth2Attrs: any = {};
-              try {
-                const raw = authNode.attrs?.oauth2Config;
-                if (raw) oauth2Attrs = typeof raw === 'string' ? JSON.parse(raw) : raw;
-              } catch {}
-              const varPrefix = oauth2Attrs.variablePrefix || 'oauth2';
-              finalConfig = {
-                accessToken: `{{process.${varPrefix}_access_token}}`,
-                tokenType: `{{process.${varPrefix}_token_type}}`,
-                headerPrefix: oauth2Attrs.headerPrefix || 'Bearer',
-                addTokenTo: oauth2Attrs.addTokenTo || 'header',
-                autoRefresh: oauth2Attrs.autoRefresh === true,
-                variablePrefix: varPrefix,
-                grantType: oauth2Attrs.grantType || 'authorization_code',
-                tokenUrl: config.token_url || oauth2Attrs.tokenUrl || '',
-                clientId: config.client_id || oauth2Attrs.clientId || '',
-                clientSecret: config.client_secret || oauth2Attrs.clientSecret || '',
-                scope: config.scope || '',
-                refreshToken: `{{process.${varPrefix}_refresh_token}}`,
-              };
-            }
-            return { enabled: true, type: mappedType, config: finalConfig };
-          };
-
           // Merge user headers with required Content-Type default
-          const userHeaders = readTableHeaders('headers-table');
-          const cookies = readTableHeaders('cookies-table');
+          const userHeaders = readTableHeaders(editorJson.content, 'headers-table');
+          const cookies = readTableHeaders(editorJson.content, 'cookies-table');
           const mergedHeaders = [{ key: 'Content-Type', value: 'application/json', enabled: true }];
           for (const uh of userHeaders) {
             const idx = mergedHeaders.findIndex(h => h.key.toLowerCase() === uh.key.toLowerCase());
@@ -213,7 +131,7 @@ export default function createGraphQLPlugin(context: PluginContext) {
             else mergedHeaders.push({ key: 'Cookie', value: cookieString, enabled: true });
           }
 
-          const auth = readAuth();
+          const auth = readAuth(editorJson.content);
 
           // Get pre/post request scripts
           const preRequestBlock = editorJson.content?.find((n: any) => n.type === 'pre_request_block');
