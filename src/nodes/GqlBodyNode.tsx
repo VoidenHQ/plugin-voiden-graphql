@@ -45,6 +45,7 @@ import {
   isOperationInQuery,
 } from "../utils/graphql-parser";
 import { extractOperations, parseQuerySelections } from "../utils/query-parser";
+import { buildIntrospectionRequestParts, sectionContent, type DocNode } from "../lib/requestHeaders";
 import { generateQuery } from "../utils/query-generator";
 
 export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
@@ -95,32 +96,55 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     }, [props.editor.state, props.node.attrs.importedFrom]);
 
 
-    // The GraphQL endpoint URL already lives on the sibling gqlurl node (the
-    // request's own URL field) — introspection reuses that directly instead of
-    // asking for a second, separately-typed URL. Walk up to the enclosing
-    // gqlquery container and read its gqlurl child's live text.
-    const requestUrl = React.useMemo(() => {
-      if (typeof props.getPos !== 'function') return '';
+    // The enclosing gqlquery container. getPos() is the position just before
+    // this node, so $pos.depth is the parent's depth — the container itself.
+    // Start there; starting one level higher skips it and finds nothing.
+    const findQueryNode = (): any => {
+      if (typeof props.getPos !== 'function') return null;
       const pos = props.getPos();
-      if (typeof pos !== 'number') return '';
+      if (typeof pos !== 'number') return null;
       try {
         const $pos = props.editor.state.doc.resolve(pos);
-        for (let d = $pos.depth - 1; d >= 0; d--) {
+        for (let d = $pos.depth; d >= 0; d--) {
           const ancestor = $pos.node(d);
-          if (ancestor.type.name === 'gqlquery') {
-            let found = '';
-            ancestor.descendants((node: any) => {
-              if (node.type.name === 'gqlurl') {
-                found = node.textContent || '';
-                return false;
-              }
-            });
-            return found;
-          }
+          if (ancestor.type.name === 'gqlquery') return ancestor;
         }
       } catch (e) {}
-      return '';
-    }, [props.editor.state, props.getPos]);
+      return null;
+    };
+
+    // The GraphQL endpoint URL already lives on the sibling gqlurl node (the
+    // request's own URL field) — introspection reuses that directly instead of
+    // asking for a second, separately-typed URL. Read at call time, not
+    // memoized: typing in the sibling URL field doesn't re-render this node
+    // view, so a cached value stays empty.
+    const readRequestUrl = (): string => {
+      let found = '';
+      findQueryNode()?.descendants((node: any) => {
+        if (node.type.name === 'gqlurl') {
+          found = node.textContent || '';
+          return false;
+        }
+      });
+      return found.trim();
+    };
+
+    // Introspection goes through the same credentials as a normal run: the
+    // request's auth, header and cookie blocks, taken from this request's
+    // section of the document. Without them an endpoint that needs a token
+    // answers 401 and the schema can never load.
+    const buildIntrospectionRequest = (url: string) => {
+      const section = sectionContent(props.editor.getJSON().content as DocNode[], findQueryNode()?.attrs?.uid);
+      const { headers, queryParams } = buildIntrospectionRequestParts(section);
+      return {
+        method: 'POST',
+        url,
+        headers,
+        body: JSON.stringify({ query: introspectionQuery }),
+        queryParams,
+        pathParams: [],
+      };
+    };
 
     const introspectionQuery = `
       query IntrospectionQuery {
@@ -239,6 +263,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
     };
 
     const handleConnect = async () => {
+      const requestUrl = readRequestUrl();
       if (!requestUrl) {
         setConnectionError('Enter the request URL above first');
         return;
@@ -246,14 +271,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       setIsConnecting(true);
       setConnectionError('');
       try {
-        const requestState = {
-          method: 'POST',
-          url: requestUrl,
-          headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
-          body: JSON.stringify({ query: introspectionQuery }),
-          queryParams: [],
-          pathParams: [],
-        };
+        const requestState = buildIntrospectionRequest(requestUrl);
         const response = await (window as any).electron?.request?.sendSecure(requestState);
         if (!response || !response.status || response.status < 200 || response.status >= 300) {
           throw new Error(`HTTP ${response?.status || 'N/A'}: ${response?.statusText || 'Unknown error'}`);
@@ -355,12 +373,7 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
       const url = props.node.attrs.schemaUrl;
       if (!url) return;
       try {
-        const requestState = {
-          method: 'POST', url,
-          headers: [{ key: 'Content-Type', value: 'application/json', enabled: true }],
-          body: JSON.stringify({ query: introspectionQuery }),
-          queryParams: [], pathParams: [],
-        };
+        const requestState = buildIntrospectionRequest(url);
         const response = await (window as any).electron?.request?.sendSecure(requestState);
         if (!response || !response.status || response.status < 200 || response.status >= 300) {
           // Drop the stale schemaUrl so the schema selector falls back to the
@@ -440,10 +453,10 @@ export const createGqlBodyNode = (NodeViewWrapper: any, CodeEditor: any) => {
         return;
       }
       try {
-        const electronFile = file as File & { path?: string };
-        const filePath = electronFile.path || electronFile.webkitRelativePath;
-        if (!filePath) { alert('Could not get file path'); return; }
         const electronApi = (window as any).electron;
+        // Electron removed File.path; webUtils.getPathForFile (via preload) replaces it.
+        const filePath = electronApi?.utils?.getPathForFile?.(file);
+        if (!filePath) { alert('Could not get file path'); return; }
         if (!electronApi?.files?.read) { alert('File API not available'); return; }
         const content = await electronApi.files.read(filePath);
         const parsed = parseGraphQLSchema(content);
