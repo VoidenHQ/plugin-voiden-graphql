@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.1.0",
+    "date": "26/11/2026",
+    "title": "Fix: Schema Import From File and URL",
+    "changes": {
+      "Fixed": [
+        "Importing a schema file no longer fails with \"Could not get file path\".",
+        "Fetching the schema from the request URL no longer says to enter the URL when one is already set.",
+        "Fetching the schema now sends the request's auth, headers and cookies, so token-protected endpoints work."
+      ]
+    }
+  },
+  {
     "version": "v1.0.10",
     "date": "02/11/2026",
     "title": "Fix: Prettify Rounded Large Numbers in Variables",
